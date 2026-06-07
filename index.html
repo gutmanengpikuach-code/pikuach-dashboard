@@ -322,7 +322,8 @@ window.addEventListener('appReady', () => loadFromCloud());
   .pdf-defect-body p { font-size: 11px; color: #333; line-height: 1.6; margin-bottom: 7px; }
   .pdf-images-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 7px; }
   .pdf-img-wrap { text-align: center; }
-  .pdf-img-wrap img { width: 100%; max-height: 155px; object-fit: cover; border-radius: 4px; border: 1px solid #dde; }
+  .pdf-img-wrap .img-box { width: 100%; height: 160px; display: flex; align-items: center; justify-content: center; background: #f9f9f9; border-radius: 4px; border: 1px solid #dde; overflow: hidden; }
+  .pdf-img-wrap .img-box img { max-width: 100%; max-height: 160px; width: auto; height: auto; object-fit: contain; display: block; }
   .pdf-img-label { font-size: 9px; color: #888; margin-top: 3px; }
   .pdf-notes-box { background: #f8f9fa; border: 1px solid #dde; border-radius: 6px; padding: 11px; font-size: 11px; line-height: 1.7; }
   .pdf-footer { position: absolute; bottom: 18px; left: 48px; right: 48px; text-align: center; font-size: 9px; color: #aaa; border-top: 1px solid #eee; padding-top: 5px; }
@@ -769,7 +770,7 @@ function buildPDFHTML(report) {
       ...(d.planImages||[]).map(s=>({src:s,lbl:'תמונה מהתכנית'}))
     ];
     const imgsHtml = allImgs.length
-      ? '<div class="pdf-images-row">' + allImgs.map(img=>`<div class="pdf-img-wrap"><img src="${img.src}" crossorigin="anonymous"><div class="pdf-img-label">${img.lbl}</div></div>`).join('') + '</div>'
+      ? '<div class="pdf-images-row">' + allImgs.map(img=>`<div class="pdf-img-wrap"><div class="img-box"><img src="${img.src}" crossorigin="anonymous"></div><div class="pdf-img-label">${img.lbl}</div></div>`).join('') + '</div>'
       : '';
     defectsHtml += `<div class="pdf-defect-block">
       <div class="pdf-defect-header">ליקוי #${i+1}${d.topic?' — '+d.topic:''}</div>
@@ -873,8 +874,24 @@ async function sendEmail() {
   await saveReport(true);
   await generateAndDownloadPDF(currentReportId);
   const body='שלום,\n\nמצורף דוח פיקוח עליון.\nהקובץ הורד למכשירך - יש לצרפו למייל.\n\nגוטמן יעקב מהנדסים בע"מ';
-  window.location.href='mailto:'+email+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
-  showToast('📧 PDF נשמר — צרף למייל שנפתח');
+  // Try Web Share API first (mobile), fallback to mailto
+  const shareText = 'שלום,\n\nמצורף דוח פיקוח עליון.\n\nגוטמן יעקב מהנדסים בע"מ';
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: subject,
+        text: shareText + '\n\n(יש לצרף את קובץ ה-PDF שהורד)'
+      });
+      showToast('✅ PDF הורד — צרף לשיתוף');
+    } catch(e) {
+      if (e.name !== 'AbortError') {
+        window.location.href='mailto:'+email+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(shareText);
+      }
+    }
+  } else {
+    window.location.href='mailto:'+email+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(shareText);
+    showToast('📧 PDF נשמר — צרף למייל שנפתח');
+  }
 }
 
 // ===================== UTILS =====================
