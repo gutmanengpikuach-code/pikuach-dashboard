@@ -244,12 +244,14 @@ window.addEventListener('appReady', () => loadFromCloud());
     padding: 11px; font-family: 'Assistant', sans-serif; font-size: 14px; font-weight: 600;
     color: var(--primary); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
   }
-  .img-upload-area {
-    border: 2px dashed var(--border); border-radius: 8px; padding: 10px; text-align: center; cursor: pointer; background: white;
+  .img-source-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
+  .img-src-btn {
+    border: none; border-radius: 8px; padding: 10px 6px;
+    font-family: 'Assistant', sans-serif; font-size: 14px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
   }
-  .img-upload-area input[type="file"] { display: none; }
-  .img-upload-area .upload-icon { font-size: 22px; margin-bottom: 3px; }
-  .img-upload-area p { font-size: 11px; color: var(--text-light); }
+  .img-src-camera { background: #1a3a5c; color: white; }
+  .img-src-gallery { background: var(--bg); color: var(--primary); border: 1.5px solid var(--border); }
   .img-previews { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin-top: 6px; }
   .img-preview-wrap { position: relative; aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: var(--bg); }
   .img-preview-wrap img { width: 100%; height: 100%; object-fit: cover; }
@@ -587,18 +589,22 @@ function addDefect(data) {
       <div class="two-col">
         <div class="field-group">
           <label class="field-label">📷 תמונת הליקוי</label>
-          <div class="img-upload-area" onclick="document.getElementById('d_img_${idx}').click()">
-            <input type="file" accept="image/*" multiple id="d_img_${idx}" onchange="handleImages('d_imgs_${idx}',this)">
-            <div class="upload-icon">📷</div><p>לחץ להעלאה</p>
+          <div class="img-source-btns">
+            <button type="button" class="img-src-btn img-src-camera" onclick="document.getElementById('d_img_cam_${idx}').click()">📷 צלם</button>
+            <button type="button" class="img-src-btn img-src-gallery" onclick="document.getElementById('d_img_gal_${idx}').click()">🖼 גלריה</button>
           </div>
+          <input type="file" accept="image/*" capture="environment" id="d_img_cam_${idx}" style="display:none" onchange="handleImages('d_imgs_${idx}',this)">
+          <input type="file" accept="image/*" multiple id="d_img_gal_${idx}" style="display:none" onchange="handleImages('d_imgs_${idx}',this)">
           <div class="img-previews" id="d_imgs_${idx}"></div>
         </div>
         <div class="field-group">
           <label class="field-label">📐 תמונה מהתכנית</label>
-          <div class="img-upload-area" onclick="document.getElementById('d_plan_${idx}').click()">
-            <input type="file" accept="image/*" multiple id="d_plan_${idx}" onchange="handleImages('d_plans_${idx}',this)">
-            <div class="upload-icon">📐</div><p>לחץ להעלאה</p>
+          <div class="img-source-btns">
+            <button type="button" class="img-src-btn img-src-camera" onclick="document.getElementById('d_plan_cam_${idx}').click()">📷 צלם</button>
+            <button type="button" class="img-src-btn img-src-gallery" onclick="document.getElementById('d_plan_gal_${idx}').click()">🖼 גלריה</button>
           </div>
+          <input type="file" accept="image/*" capture="environment" id="d_plan_cam_${idx}" style="display:none" onchange="handleImages('d_plans_${idx}',this)">
+          <input type="file" accept="image/*" multiple id="d_plan_gal_${idx}" style="display:none" onchange="handleImages('d_plans_${idx}',this)">
           <div class="img-previews" id="d_plans_${idx}"></div>
         </div>
       </div>
