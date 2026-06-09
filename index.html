@@ -47,6 +47,9 @@ async function saveToCloud(report) {
   try {
     showToast('☁️ שומר לענן...');
     // Upload all images first
+    if (report.elementsImages?.some(s => !s.startsWith('http'))) {
+      report.elementsImages = await uploadImages(report.id, 0, 'elements', report.elementsImages);
+    }
     for (let i = 0; i < (report.defects||[]).length; i++) {
       const d = report.defects[i];
       if (d.images?.some(s => !s.startsWith('http'))) {
@@ -264,7 +267,7 @@ window.addEventListener('appReady', () => loadFromCloud());
   .bottom-actions {
     position: fixed; bottom: 0; left: 0; right: 0; background: white;
     border-top: 1px solid var(--border); padding: 9px 12px;
-    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 7px; z-index: 50;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 7px; z-index: 50;
   }
   .action-btn {
     padding: 10px 4px; border: none; border-radius: 10px;
@@ -418,8 +421,21 @@ window.addEventListener('appReady', () => loadFromCloud());
             </div>
           </div>
           <div class="field-group">
+            <label class="field-label">נוכחים בפיקוח</label>
+            <input type="text" class="field-input" id="f_attendees" placeholder="מי היה נוכח...">
+          </div>
+          <div class="field-group">
             <label class="field-label">האלמנטים הנבדקים</label>
             <input type="text" class="field-input" id="f_elements" placeholder="למשל: תקרות, קירות, עמודים...">
+            <div style="margin-top: 8px;">
+              <div class="img-source-btns" style="grid-template-columns: 1fr 1fr; width: 200px;">
+                <button type="button" class="img-src-btn img-src-camera" onclick="document.getElementById('f_elements_cam').click()">📷 צלם</button>
+                <button type="button" class="img-src-btn img-src-gallery" onclick="document.getElementById('f_elements_gal').click()">🖼 גלריה</button>
+              </div>
+              <input type="file" accept="image/*" capture="environment" id="f_elements_cam" style="display:none" onchange="handleImages('f_elements_imgs',this)">
+              <input type="file" accept="image/*" multiple id="f_elements_gal" style="display:none" onchange="handleImages('f_elements_imgs',this)">
+              <div class="img-previews" id="f_elements_imgs"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -443,30 +459,11 @@ window.addEventListener('appReady', () => loadFromCloud());
     <div class="bottom-actions">
       <button class="action-btn btn-cancel" onclick="goToList()">ביטול</button>
       <button class="action-btn btn-save" onclick="saveReport()">☁️ שמור</button>
-      <button class="action-btn btn-download-pdf" onclick="downloadPDF()">📄 PDF</button>
-      <button class="action-btn btn-send" onclick="openEmailModal()">📧 מייל</button>
     </div>
   </div>
 </div>
 
-<!-- EMAIL MODAL -->
-<div class="modal-overlay" id="emailModal">
-  <div class="modal-sheet">
-    <div class="modal-title">שליחת דוח במייל</div>
-    <div class="modal-field">
-      <label class="field-label">כתובת מייל</label>
-      <input type="email" class="field-input" id="emailAddr" placeholder="example@email.com" dir="ltr">
-    </div>
-    <div class="modal-field">
-      <label class="field-label">נושא המייל</label>
-      <input type="text" class="field-input" id="emailSubject">
-    </div>
-    <div class="modal-btns">
-      <button class="modal-btn modal-btn-cancel" onclick="closeEmailModal()">ביטול</button>
-      <button class="modal-btn modal-btn-primary" onclick="sendEmail()">📧 שמור PDF ושלח</button>
-    </div>
-  </div>
-</div>
+
 
 <div id="pdfRenderArea"></div>
 <div class="toast" id="toast"></div>
@@ -562,11 +559,12 @@ function editReport(id) {
 
 // ===================== FORM =====================
 function clearForm() {
-  ['f_recipient','f_date','f_projectNum','f_address','f_inspectDate','f_inspector','f_elements','f_notes']
+  ['f_recipient','f_date','f_projectNum','f_address','f_inspectDate','f_inspector','f_attendees','f_elements','f_notes']
     .forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   document.getElementById('defectsList').innerHTML = '';
   defectCount = 0;
-  Object.keys(imageStore).forEach(k => { if(k.startsWith('d_')) delete imageStore[k]; });
+  Object.keys(imageStore).forEach(k => { if(k.startsWith('d_') || k.startsWith('f_')) delete imageStore[k]; });
+  renderImagePreviews('f_elements_imgs');
 }
 
 function addDefect(data) {
@@ -667,7 +665,9 @@ function getFormData() {
     address: document.getElementById('f_address').value,
     inspectDate: document.getElementById('f_inspectDate').value,
     inspector: document.getElementById('f_inspector').value,
+    attendees: document.getElementById('f_attendees').value,
     elements: document.getElementById('f_elements').value,
+    elementsImages: imageStore['f_elements_imgs']||[],
     notes: document.getElementById('f_notes').value,
     defects
   };
@@ -681,7 +681,12 @@ function loadForm(report) {
   document.getElementById('f_address').value = report.address||'';
   document.getElementById('f_inspectDate').value = report.inspectDate||'';
   document.getElementById('f_inspector').value = report.inspector||'';
+  document.getElementById('f_attendees').value = report.attendees||'';
   document.getElementById('f_elements').value = report.elements||'';
+  if (report.elementsImages?.length) {
+    imageStore['f_elements_imgs'] = report.elementsImages;
+    renderImagePreviews('f_elements_imgs');
+  }
   document.getElementById('f_notes').value = report.notes||'';
   document.getElementById('formVersionBadge').textContent = 'גרסה '+(report.version||1);
   (report.defects||[]).forEach(d => addDefect(d));
@@ -793,8 +798,10 @@ function buildPDFHTML(report) {
       <tr><td class="lbl">לכבוד</td><td>${report.recipient||'-'}</td><td class="lbl">תאריך הדוח</td><td>${fmtDate(report.date)}</td></tr>
       <tr><td class="lbl">כתובת הפרויקט</td><td colspan="3">${report.address||'-'}</td></tr>
       <tr><td class="lbl">מס׳ פרויקט</td><td>${report.projectNum||'-'}</td><td class="lbl">תאריך הבדיקה</td><td>${fmtDate(report.inspectDate)}</td></tr>
-      <tr><td class="lbl">שם הבודק</td><td>${report.inspector||'-'}</td><td class="lbl">אלמנטים נבדקים</td><td>${report.elements||'-'}</td></tr>
+      <tr><td class="lbl">שם הבודק</td><td>${report.inspector||'-'}</td><td class="lbl">נוכחים</td><td>${report.attendees||'-'}</td></tr>
+      <tr><td class="lbl">אלמנטים נבדקים</td><td colspan="3">${report.elements||'-'}</td></tr>
     </table>
+    ${report.elementsImages?.length ? '<div class="pdf-images-row">' + report.elementsImages.map(s => `<div class="pdf-img-wrap"><div class="img-box"><img src="${s}" crossorigin="anonymous"></div><div class="pdf-img-label">אזור נבדק</div></div>`).join('') + '</div>' : ''}
     ${(report.defects||[]).length?'<div class="pdf-section-header">ממצאים וליקויים</div>':''}
     ${defectsHtml}
     ${notesHtml}
@@ -828,27 +835,27 @@ async function generateAndDownloadPDF(reportId, returnBlob) {
   const imgRatio = canvas.height / canvas.width;
   const renderedH = pageW * imgRatio;
   if (renderedH <= pageH) {
-    pdf.addImage(imgData,'JPEG',0,0,pageW,renderedH);
+    pdf.addImage(imgData, 'JPEG', 0, 0, pageW, renderedH);
   } else {
-    const sliceHpx = Math.floor(canvas.width*(pageH/pageW));
-    let offsetY=0, first=true;
+    const sliceHpx = Math.floor(canvas.width * (pageH / pageW));
+    let offsetY = 0, first = true;
     while (offsetY < canvas.height) {
       if (!first) pdf.addPage();
-      first=false;
+      first = false;
       const sc = document.createElement('canvas');
-      sc.width=canvas.width; sc.height=sliceHpx;
-      const ctx=sc.getContext('2d');
-      ctx.fillStyle='#fff'; ctx.fillRect(0,0,sc.width,sc.height);
-      ctx.drawImage(canvas,0,-offsetY);
-      pdf.addImage(sc.toDataURL('image/jpeg',0.98),'JPEG',0,0,pageW,pageH);
-      offsetY+=Math.min(sliceHpx, canvas.height-offsetY);
+      sc.width = canvas.width; sc.height = sliceHpx;
+      const ctx = sc.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, sc.width, sc.height);
+      ctx.drawImage(canvas, 0, -offsetY);
+      pdf.addImage(sc.toDataURL('image/jpeg', 0.98), 'JPEG', 0, 0, pageW, pageH);
+      offsetY += Math.min(sliceHpx, canvas.height - offsetY);
     }
   }
-  area.innerHTML='';
+  area.innerHTML = '';
   if (returnBlob) return pdf.output('blob');
-  const addr=(report.address||'דוח').replace(/[^\u0590-\u05FFa-zA-Z0-9]/g,'_');
-  const dateStr=(report.inspectDate||'').replace(/-/g,'');
-  const ver=report.version||1;
+  const addr = (report.address || 'דוח').replace(/[^\u0590-\u05FFa-zA-Z0-9]/g, '_');
+  const dateStr = (report.inspectDate || '').replace(/-/g, '');
+  const ver = report.version || 1;
   pdf.save(`דוח_פיקוח_${addr}_v${ver}_${dateStr}.pdf`);
   showToast('✅ PDF הורד בהצלחה');
   return null;
@@ -859,40 +866,7 @@ async function downloadPDF() {
   await generateAndDownloadPDF(currentReportId);
 }
 
-// ===================== EMAIL =====================
-function openEmailModal() {
-  const r = currentReportId ? reports.find(x=>x.id===currentReportId) : null;
-  document.getElementById('emailSubject').value = 'דוח פיקוח עליון - '+(r?.address||'פרויקט');
-  document.getElementById('emailModal').classList.add('open');
-}
-function closeEmailModal() { document.getElementById('emailModal').classList.remove('open'); }
-async function sendEmail() {
-  const email=document.getElementById('emailAddr').value;
-  const subject=document.getElementById('emailSubject').value;
-  if (!email) { showToast('⚠️ נא להזין כתובת מייל'); return; }
-  closeEmailModal();
-  await saveReport(true);
-  await generateAndDownloadPDF(currentReportId);
-  const body='שלום,\n\nמצורף דוח פיקוח עליון.\nהקובץ הורד למכשירך - יש לצרפו למייל.\n\nגוטמן יעקב מהנדסים בע"מ';
-  // Try Web Share API first (mobile), fallback to mailto
-  const shareText = 'שלום,\n\nמצורף דוח פיקוח עליון.\n\nגוטמן יעקב מהנדסים בע"מ';
-  if (navigator.share) {
-    try {
-      await navigator.share({
-        title: subject,
-        text: shareText + '\n\n(יש לצרף את קובץ ה-PDF שהורד)'
-      });
-      showToast('✅ PDF הורד — צרף לשיתוף');
-    } catch(e) {
-      if (e.name !== 'AbortError') {
-        window.location.href='mailto:'+email+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(shareText);
-      }
-    }
-  } else {
-    window.location.href='mailto:'+email+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(shareText);
-    showToast('📧 PDF נשמר — צרף למייל שנפתח');
-  }
-}
+
 
 // ===================== UTILS =====================
 function showToast(msg) {
